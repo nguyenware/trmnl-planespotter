@@ -1,17 +1,18 @@
 # systemd unit for pushing the closest aircraft to TRMNL.
-# Install: see README.md ("Run it on boot").
+# Installed by install.sh; see README.md.
 [Unit]
 Description=TRMNL Planespotter (tar1090 -> TRMNL webhook)
-After=network-online.target tar1090.service readsb.service
+After=network-online.target readsb.service tar1090.service docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/trmnl-planespotter
-ExecStart=/home/pi/trmnl-planespotter/.venv/bin/python planespotter.py push
+User=planespotter
+WorkingDirectory=/opt/trmnl-planespotter
+ExecStart=/opt/trmnl-planespotter/.venv/bin/python planespotter.py push
 Restart=on-failure
 RestartSec=30
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target

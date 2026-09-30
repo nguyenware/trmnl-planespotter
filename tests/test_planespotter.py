@@ -169,3 +169,33 @@ def test_push_posts_merge_variables(config):
     with patch.object(ps.requests, "post", return_value=MagicMock(status_code=200)) as post:
         ps.push(config, {"status": "empty"})
     post.assert_called_once_with(config.webhook_url, json={"merge_variables": {"status": "empty"}}, timeout=15)
+
+
+def test_detect_source_picks_first_readable(monkeypatch, tmp_path):
+    good = tmp_path / "readsb"
+    good.mkdir()
+    (good / "aircraft.json").write_text('{"now": 1, "aircraft": []}')
+    monkeypatch.setattr(ps, "SOURCE_CANDIDATES", (str(tmp_path / "missing"), str(good)))
+    assert ps.detect_source() == (str(good / "aircraft.json"), str(good / "receiver.json"))
+
+
+def test_detect_source_gives_up(monkeypatch, tmp_path):
+    monkeypatch.setattr(ps, "SOURCE_CANDIDATES", (str(tmp_path / "missing"),))
+    with pytest.raises(SystemExit):
+        ps.detect_source()
+
+
+def test_config_tar1090_url(monkeypatch):
+    monkeypatch.delenv("AIRCRAFT_JSON", raising=False)
+    monkeypatch.delenv("RECEIVER_JSON", raising=False)
+    monkeypatch.setenv("TAR1090_URL", "http://10.0.0.5:8080/")
+    config = ps.Config()
+    assert config.aircraft_url == "http://10.0.0.5:8080/data/aircraft.json"
+    assert config.receiver_url == "http://10.0.0.5:8080/data/receiver.json"
+
+
+def test_config_aircraft_json_only(monkeypatch):
+    monkeypatch.delenv("TAR1090_URL", raising=False)
+    monkeypatch.delenv("RECEIVER_JSON", raising=False)
+    monkeypatch.setenv("AIRCRAFT_JSON", "/run/readsb/aircraft.json")
+    assert ps.Config().receiver_url == "/run/readsb/receiver.json"

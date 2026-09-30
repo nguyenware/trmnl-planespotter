@@ -56,9 +56,16 @@ class Config:  # pylint: disable=too-many-instance-attributes,too-few-public-met
     """All settings, read from the environment."""
 
     def __init__(self):
-        base = os.environ.get("TAR1090_URL", "http://localhost/tar1090").rstrip("/")
-        self.aircraft_url = os.environ.get("AIRCRAFT_JSON", f"{base}/data/aircraft.json")
-        self.receiver_url = os.environ.get("RECEIVER_JSON", f"{base}/data/receiver.json")
+        base = os.environ.get("TAR1090_URL", "").strip().rstrip("/")
+        aircraft = os.environ.get("AIRCRAFT_JSON", "").strip()
+        receiver = os.environ.get("RECEIVER_JSON", "").strip()
+        if base:
+            aircraft = aircraft or f"{base}/data/aircraft.json"
+            receiver = receiver or f"{base}/data/receiver.json"
+        elif not aircraft:
+            aircraft, receiver = detect_source(receiver)
+        self.aircraft_url = aircraft
+        self.receiver_url = receiver or os.path.join(os.path.dirname(aircraft), "receiver.json")
         self.lat = env_float("RECEIVER_LAT")
         self.lon = env_float("RECEIVER_LON")
         self.unit = os.environ.get("DISTANCE_UNIT", "mi").lower()
@@ -74,10 +81,37 @@ class Config:  # pylint: disable=too-many-instance-attributes,too-few-public-met
         self.port = int(env_float("PORT", 5000))
 
 
-def read_json(location):
+# Where readsb / dump1090-fa / tar1090 usually publish their JSON, checked in order
+# when neither TAR1090_URL nor AIRCRAFT_JSON is set.
+SOURCE_CANDIDATES = (
+    "/run/readsb",
+    "/run/dump1090-fa",
+    "http://localhost/tar1090/data",
+    "http://localhost/data",
+    "http://localhost:8080/data",
+    "http://localhost:8080/tar1090/data",
+)
+
+
+def detect_source(receiver=""):
+    """Finds the first candidate that serves a readable aircraft.json."""
+    for candidate in SOURCE_CANDIDATES:
+        aircraft = f"{candidate}/aircraft.json"
+        try:
+            if "aircraft" in read_json(aircraft, timeout=3):
+                return aircraft, receiver or f"{candidate}/receiver.json"
+        except (requests.RequestException, OSError, ValueError):
+            continue
+    raise SystemExit(
+        "Could not find tar1090/readsb data. Set TAR1090_URL or AIRCRAFT_JSON in .env "
+        "(tried: " + ", ".join(SOURCE_CANDIDATES) + ")"
+    )
+
+
+def read_json(location, timeout=10):
     """Reads JSON from an http(s) URL or a local file path (e.g. /run/readsb/aircraft.json)."""
     if location.startswith(("http://", "https://")):
-        response = requests.get(location, timeout=10)
+        response = requests.get(location, timeout=timeout)
         response.raise_for_status()
         return response.json()
     with open(location, encoding="utf-8") as json_file:
@@ -350,11 +384,16 @@ def run_server(config):
 def main():
     load_dotenv(os.path.join(HERE, ".env"))
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("mode", nargs="?", default="push", choices=("push", "serve", "once"),
-                        help="push to a TRMNL webhook (default), serve JSON, or print once")
+    parser.add_argument("mode", nargs="?", default="push", choices=("push", "serve", "once", "detect"),
+                        help="push to a TRMNL webhook (default), serve JSON, print once, "
+                             "or show which data source is used")
     args = parser.parse_args()
     config = Config()
-    if args.mode == "once":
+    if args.mode == "detect":
+        print(f"aircraft.json: {config.aircraft_url}")
+        print(f"receiver.json: {config.receiver_url}")
+        print(f"receiver location: {receiver_location(config)}")
+    elif args.mode == "once":
         print(json.dumps(build_flight(config), indent=2, ensure_ascii=False))
     elif args.mode == "serve":
         run_server(config)

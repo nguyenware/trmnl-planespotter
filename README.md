@@ -4,7 +4,7 @@ Show the closest aircraft your own ADS-B receiver can see on a [TRMNL](https://t
 
 This is a personal version of [ervansetiawan/itsaplane-trmnl](https://github.com/ervansetiawan/itsaplane-trmnl).
 The original asks the public adsb.lol API what's overhead. This version reads directly from the
-**tar1090 / readsb** feeder running on your Raspberry Pi. The route (e.g. `DFW-MSP-DFW`) still comes
+**tar1090 / readsb** feeder running on your Raspberry Pi, VM or Proxmox LXC. The route (e.g. `DFW-MSP-DFW`) still comes
 from adsb.lol's public [VRS standing data](https://github.com/adsblol/vrs-standing-data), and airline
 logos are loaded from the upstream repo.
 
@@ -13,12 +13,12 @@ logos are loaded from the upstream repo.
 ## How it works
 
 ```
-readsb/tar1090 (Pi) ──aircraft.json──▶ planespotter.py ──webhook POST──▶ TRMNL ──▶ your display
+readsb/tar1090 (Pi/LXC) ──aircraft.json──▶ planespotter.py ──webhook POST──▶ TRMNL ──▶ your display
                                             │
                                             └── route lookup: vrs-standing-data.adsb.lol
 ```
 
-Your Pi is almost certainly not reachable from the internet, so by default the script **pushes**
+Your receiver is almost certainly not reachable from the internet, so by default the script **pushes**
 to a TRMNL *webhook* private plugin. No port forwarding or tunnel is needed.
 
 For each update it:
@@ -38,36 +38,39 @@ For each update it:
 3. Open **Edit Markup**. Paste `markup/full.liquid` into the *Full* tab and `markup/quadrant.liquid` into the *Quadrant* (and optionally *Half*) tabs.
 4. Add the plugin to a playlist.
 
-### 2. Install on the Pi
+### 2. Install on the machine running tar1090
+
+This works on a Raspberry Pi, a VM, or a Proxmox LXC. Run everything **as root inside the
+machine or container that runs tar1090**. For a Proxmox LXC, open a shell in it from the Proxmox
+host with `pct enter <id>`.
 
 ```bash
-cd ~
-git clone https://github.com/nguyenware/trmnl-planespotter.git
-cd trmnl-planespotter
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-nano .env            # paste TRMNL_WEBHOOK_URL, check TAR1090_URL
+curl -fsSL https://raw.githubusercontent.com/nguyenware/trmnl-planespotter/main/install.sh | bash
 ```
 
-Test it without pushing anything. This prints the payload for the closest aircraft right now:
+The installer:
+- installs `python3-venv` and `git`
+- clones the repo to `/opt/trmnl-planespotter` and sets up a virtualenv
+- creates a `planespotter` system user
+- creates `.env` from the example and installs and enables the `planespotter` systemd service
+- tells you which tar1090 data source it found
+
+Running it again updates to the latest `main` and keeps your `.env`.
+
+tar1090 is auto-detected in this order: `/run/readsb`, `/run/dump1090-fa`, `http://localhost/tar1090`,
+`http://localhost`, `http://localhost:8080`, `http://localhost:8080/tar1090`. That covers native
+readsb/tar1090 installs and Docker setups such as ultrafeeder that publish port 8080. If yours is
+somewhere else, set `TAR1090_URL` in `.env`.
+
+### 3. Configure and start
 
 ```bash
-.venv/bin/python planespotter.py once
-```
-
-If tar1090 isn't at `http://localhost/tar1090`, set `TAR1090_URL`. You can also point
-`AIRCRAFT_JSON`/`RECEIVER_JSON` at readsb's files directly, e.g. `/run/readsb/aircraft.json`.
-If `receiver.json` has no location, set `RECEIVER_LAT` and `RECEIVER_LON`.
-
-### 3. Run it on boot
-
-```bash
-# edit User/WorkingDirectory/ExecStart if your user or path isn't pi / /home/pi
-sudo cp planespotter.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now planespotter
-journalctl -u planespotter -f
+nano /opt/trmnl-planespotter/.env          # paste TRMNL_WEBHOOK_URL; set RECEIVER_LAT/LON if needed
+cd /opt/trmnl-planespotter
+runuser -u planespotter -- .venv/bin/python planespotter.py detect   # data source + receiver location
+runuser -u planespotter -- .venv/bin/python planespotter.py once     # payload for the closest aircraft
+systemctl restart planespotter
+journalctl -u planespotter -f                # expect "Pushed ..." every PUSH_INTERVAL seconds
 ```
 
 ## Settings (`.env`)
@@ -75,7 +78,7 @@ journalctl -u planespotter -f
 | Variable | Default | Notes |
 |---|---|---|
 | `TRMNL_WEBHOOK_URL` | – | Required for `push` mode. |
-| `TAR1090_URL` | `http://localhost/tar1090` | Base URL; reads `/data/aircraft.json` and `/data/receiver.json`. |
+| `TAR1090_URL` | auto-detected | Base URL; reads `/data/aircraft.json` and `/data/receiver.json`. |
 | `AIRCRAFT_JSON`, `RECEIVER_JSON` | derived | Override with a URL or a local file path. |
 | `RECEIVER_LAT`, `RECEIVER_LON` | from `receiver.json` | Receiver location. |
 | `RADIUS` | `25` | Search radius, in `DISTANCE_UNIT`. |
@@ -91,11 +94,12 @@ journalctl -u planespotter -f
 ```bash
 python planespotter.py push    # default: POST to the TRMNL webhook every PUSH_INTERVAL seconds
 python planespotter.py once    # print the payload once and exit
-python planespotter.py serve   # serve the payload at http://<pi>:5000/closest_flight
+python planespotter.py detect  # show which aircraft.json / receiver.json is used
+python planespotter.py serve   # serve the payload at http://<host>:5000/closest_flight
 ```
 
 `serve` is for a **polling** plugin. It's useful if you run a self-hosted BYOS server
-(Terminus, LaraPaper, …) on your LAN, or expose the Pi through Tailscale Funnel or a Cloudflare Tunnel.
+(Terminus, LaraPaper, …) on your LAN, or expose it through Tailscale Funnel or a Cloudflare Tunnel.
 The JSON is the same as the webhook payload, so the same markup works.
 
 ## Payload
