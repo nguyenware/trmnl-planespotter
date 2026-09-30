@@ -1,0 +1,19 @@
+{% comment %}
+Planespotter - compact layout for Half / Quadrant mashup slots.
+{% endcomment %}
+<div class="layout layout--col layout--center">
+{% if status == "ok" %}
+  <span class="value value--small" style="white-space: nowrap;">{{ route | default: flight }}</span>
+  <span class="label">{{ flight }} · {{ model }}</span>
+  <span class="description">
+    {% if alt == "ground" %}Ground{% else %}{{ alt | number_with_delimiter }}ft{% endif %} {{ rate_arrow }}
+    · {{ gs }} kts · {{ track_arrow }}
+  </span>
+{% else %}
+  <span class="value">Clear skies</span>
+{% endif %}
+</div>
+<div class="title_bar">
+  <span class="title">Planespotter</span>
+  {% if status == "ok" %}<span class="instance">{{ dist }} {{ unit }} {{ dir_arrow }}</span>{% endif %}
+</div>

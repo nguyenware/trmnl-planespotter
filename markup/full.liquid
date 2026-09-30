@@ -1,0 +1,108 @@
+{% comment %}
+Planespotter - full layout. Paste into the "Markup" editor of a TRMNL
+private plugin (Full tab). Variables come from planespotter.py.
+{% endcomment %}
+<style>
+.ps-logo { width: 64px; height: 64px; object-fit: contain; }
+.ps-route { font-size: 56px; line-height: 1.1; }
+.ps-main { flex: 1 1 auto; min-width: 0; }
+.ps-main > .content { width: 100%; }
+.ps-progress { width: 100%; margin-top: 6px; display: flex; justify-content: space-between; }
+.ps-nowrap { white-space: nowrap; }
+.ps-emergency { border: 3px solid black; padding: 0 8px; }
+</style>
+
+<div class="layout layout--col gap--space-between">
+{% if status == "ok" %}
+  <div class="flex flex--row gap--large stretch-x">
+    <div class="item" style="flex: 0 0 30%;">
+      <div class="meta"></div>
+      <div class="content">
+        {% if logo %}<img class="ps-logo" src="{{ logo }}" />{% endif %}
+        <span class="value {% if emergency %}ps-emergency{% endif %}">{{ flight }}</span>
+        <span class="label">{{ model }}</span>
+        {% if reg != "" %}<span class="label label--small label--gray-out">{{ reg }} · {{ hex }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="item ps-main">
+      <div class="meta"></div>
+      <div class="content">
+        {% if route != "" %}
+          <span class="value ps-route">{{ route }}</span>
+          {% for airport in airports %}
+            <span class="description clamp--1">{{ airport }}</span>
+          {% endfor %}
+          {% if progress %}
+            <div class="progress-bar progress-bar--small" style="width: 100%; margin-top: 6px;">
+              <div class="track"><div class="fill" style="width: {{ progress }}%"></div></div>
+            </div>
+            <div class="ps-progress">
+              <span class="label label--small">{{ flown | number_with_delimiter }} {{ unit }} flown</span>
+              <span class="label label--small">{{ to_go | number_with_delimiter }} {{ unit }} to go</span>
+            </div>
+          {% endif %}
+        {% else %}
+          <span class="value ps-route">{{ type | default: "----" }}</span>
+          <span class="description">No route on file for this callsign</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="columns">
+    <div class="column">
+      <div class="item"><div class="meta"></div><div class="content">
+        <span class="value value--large ps-nowrap">{% if alt == "ground" %}Ground{% else %}{{ alt | number_with_delimiter }}ft{% endif %}</span>
+        <span class="label">{% if rate and rate != 0 %}({{ rate_arrow }}{{ rate | abs | number_with_delimiter }} ft/min){% else %}Altitude{% endif %}</span>
+      </div></div>
+    </div>
+    <div class="column">
+      <div class="item"><div class="meta"></div><div class="content">
+        <span class="value value--large ps-nowrap">{{ gs | default: "-" }} kts</span>
+        <span class="label label--underline">Ground Speed</span>
+      </div></div>
+    </div>
+    <div class="column">
+      <div class="item"><div class="meta"></div><div class="content">
+        <span class="value value--large ps-nowrap">{{ track_arrow }} {{ track | default: "-" }}°</span>
+        <span class="label label--underline">Course</span>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="columns">
+    <div class="column"><div class="item"><div class="meta"></div><div class="content">
+      <span class="value value--small ps-nowrap">{{ squawk | default: "-" }}</span>
+      <span class="label label--underline">Squawk</span>
+    </div></div></div>
+    <div class="column"><div class="item"><div class="meta"></div><div class="content">
+      <span class="value value--small ps-nowrap">{% if nav_heading %}{{ nav_heading_arrow }} {{ nav_heading }}°{% else %}-{% endif %}</span>
+      <span class="label label--underline">NAV Heading</span>
+    </div></div></div>
+    <div class="column"><div class="item"><div class="meta"></div><div class="content">
+      <span class="value value--small ps-nowrap">{{ nav_alt | default: "-" }}</span>
+      <span class="label label--underline">NAV Alt</span>
+    </div></div></div>
+    <div class="column"><div class="item"><div class="meta"></div><div class="content">
+      <span class="value value--small ps-nowrap">{{ qnh | default: "-" }}</span>
+      <span class="label label--underline">QNH</span>
+    </div></div></div>
+  </div>
+{% else %}
+  <div class="flex flex--col flex--center stretch">
+    <span class="value value--xlarge">Clear skies</span>
+    <span class="description">No aircraft within {{ radius }} {{ unit }} of the receiver</span>
+  </div>
+{% endif %}
+</div>
+
+<div class="title_bar">
+  <span class="title">Planespotter</span>
+  {% if status == "ok" %}
+    <span class="instance">{{ dir_arrow }} {{ dir }}° · {{ dist }} {{ unit }} away</span>
+  {% endif %}
+</div>
