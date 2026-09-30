@@ -35,6 +35,9 @@ python3 -m venv "$DIR/.venv"
 echo "==> Creating service user '$SVC_USER'"
 id "$SVC_USER" >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin "$SVC_USER"
 
+# The service user must be able to read the code and venv, whatever root's umask is.
+chmod -R go+rX "$DIR"
+
 if [ ! -f "$DIR/.env" ]; then
   cp "$DIR/.env.example" "$DIR/.env"
   echo "==> Created $DIR/.env from the example"
